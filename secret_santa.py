@@ -12,7 +12,7 @@ import sys
 
 """"""
 def load_data(file):
-    return pd.read_csv(file)
+   return pd.read_csv(file)
 
 """Checking for free network edges aka people who need to be paired"""
 def has_free_edge(edge_df):
@@ -20,13 +20,13 @@ def has_free_edge(edge_df):
 
 """"Draws from a hat, if the hat created hamiltonian circuits"""
 def draw_edges_from_hat(edgelist):
+    local_draws = pd.DataFrame(columns=['From', 'To'])
     while has_free_edge(edgelist):
         pick = edgelist.sample(n=1)
-        pairs.append(pick)
         illegal_edges = find_illegal_edges(edgelist, pick)
         edgelist = remove_illegal_edges(edgelist, illegal_edges)
-    result = pairs
-    return (result)
+        local_draws = pd.concat([local_draws,pick],ignore_index=True)
+    return(local_draws)
 
 """Find the edges that need to be removed from the graph"""
 def find_illegal_edges(edgelist, pick):
@@ -70,24 +70,16 @@ def preprocess(file):
     ##All possible pairs (without self-loops) minus marriages
     edges_difference = set(G.edges()) - set(M.edges())
     edgelist = pd.DataFrame(edges_difference, columns=['From', 'To'])
-    global pairs
-    pairs = []
     return edgelist
 
 """Check if algorthim produced satisfactory solution"""
-def test_solution(pairs):
+def test_solution(draws):
     global P
     P = nx.DiGraph()
     # Add edges to the graph
-    for pair_df in pairs:
-        edges = pairs.to_numpy().tolist()
+    for pair_df in draws:
+        edges = draws.to_numpy().tolist()
         P.add_edges_from(edges)
-
-    # Draw the graph
-    pos = nx.spring_layout(P)
-    nx.draw(P, pos, with_labels=True, font_weight='bold', node_color='skyblue', node_size=800, font_size=8,
-            edge_color='red', linewidths=0.8)
-    plt.show()
     degrees = [val for (node, val) in P.degree()]
     # is it a cycle?
     continuous_loop = all(x == 2 for x in degrees)
@@ -95,24 +87,34 @@ def test_solution(pairs):
     number_of_connected_components = nx.number_connected_components(P_undirected)
     n_components = number_of_connected_components == 1
     # Are there any self.loops?
-    no_self_loop = not (any(pairs.From == pairs.To))
-    merged_test = pd.merge(pairs, marriages, how='inner', left_on="From", right_on="Giver_Full_Name")
+    no_self_loop = not (any(draws.From == draws.To))
+    merged_test = pd.merge(draws, marriages, how='inner', left_on="From", right_on="Giver_Full_Name")
     # any marriages?
     no_marriages = len(merged_test[merged_test['To'] == merged_test['Spouse_Full_Name']]) == 0
-    return continuous_loop and no_self_loop and no_marriages and not pairs.empty and n_components
+    return continuous_loop and no_self_loop and no_marriages and not draws.empty and n_components
 
 
 """Write to CSV"""
 def return_output(take):
     take.to_csv('secretsanta.csv', index=False)
 
-def main():
-    file = '/Users/justinjones/Downloads/xmas_list_input.csv'
+def main(file):
     edgelist = preprocess(file)
-    while not test_solution(pairs):
-        pairs = draw_edges_from_hat(edgelist)
-    take = pd.merge(pairs, santaData, how='inner', left_on='From', right_on="Giver_Full_Name")
+    picks = pd.DataFrame(columns=['From','To'])
+    while not test_solution(picks):
+        picks = draw_edges_from_hat(edgelist)
+    take = pd.merge(picks, santaData, how='inner', left_on='From', right_on="Giver_Full_Name")
+    plt.show(block=False)
+    pos = nx.spring_layout(P)
+    nx.draw(P, pos, with_labels=True, font_weight='bold', node_color='skyblue', node_size=800, font_size=8,
+           edge_color='red', linewidths=0.8)
+    plt.show()
     return_output(take)
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 2:
+        print("Usage: python script.py <file_path>")
+        sys.exit(1)
+
+    file_path = sys.argv[1]
+    main(file_path)
